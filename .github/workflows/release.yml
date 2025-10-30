@@ -1,0 +1,38 @@
+name: Release Workflow
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check release type
+        run: |
+          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+            echo "This is a pre-release."
+          else
+            echo "This is a full release."
+          fi
+
+      - name: Simulate a long-running task
+        run: |
+          echo "Starting a task that will take some time..."
+          sleep 10 # Simulating a 10-second task for testing
+          echo "Task finished."
+
+      - name: Create a dummy artifact
+        run: echo "This is a dummy artifact for ${{ github.ref_name }}" > artifact.txt
+
+      - name: Upload artifact to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} artifact.txt
+
