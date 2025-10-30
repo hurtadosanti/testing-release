@@ -2,7 +2,7 @@ name: Release Workflow
 
 on:
   release:
-    types: [created, prereleased]
+    types: [created, published, prereleased]
 
 jobs:
   info-created:
@@ -20,7 +20,7 @@ jobs:
           echo "Upload URL: ${{ github.event.release.upload_url }}"
 
   build-and-release:
-    if: ${{ github.event.action == 'prereleased' && github.event.release.prerelease == true }}
+    if: ${{ (github.event.action == 'prereleased') && github.event.release.prerelease == true }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
