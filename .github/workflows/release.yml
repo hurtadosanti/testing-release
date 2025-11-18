@@ -1,52 +1,82 @@
-name: Release Workflow
+name: Release
 
 on:
   release:
-    types: [created, published, prereleased]
+    types:
+      - prereleased
+
+permissions:
+  contents: write
 
 jobs:
-  info-created:
-    if: ${{ github.event.action == 'created' }}
+  release:
+    name: Validate and Promote Release
     runs-on: ubuntu-latest
-    steps:
-      - name: Log release created event
-        run: |
-          echo "Action: ${{ github.event.action }}"
-          echo "Release tag: ${{ github.event.release.tag_name }}"
-          echo "Is draft: ${{ github.event.release.draft }}"
-          echo "Is prerelease: ${{ github.event.release.prerelease }}"
-          echo "Target commitish: ${{ github.event.release.target_commitish }}"
-          echo "Release URL: ${{ github.event.release.html_url }}"
-          echo "Upload URL: ${{ github.event.release.upload_url }}"
 
-  build-and-release:
-    if: ${{ (github.event.action == 'prereleased' || github.event.action == 'published') && github.event.release.prerelease == true }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout code
+      - name: Checkout repository (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Log prerelease info
+      - name: Validate release targets main
         run: |
-          echo "Action: ${{ github.event.action }}"
-          echo "Release tag: ${{ github.event.release.tag_name }}"
-          echo "Is prerelease: ${{ github.event.release.prerelease }}"
-          echo "Release URL: ${{ github.event.release.html_url }}"
-          echo "Upload URL: ${{ github.event.release.upload_url }}"
+          TARGET_BRANCH="${{ github.event.release.target_commitish }}"
+          echo "Target branch from release: $TARGET_BRANCH"
+          if [ "$TARGET_BRANCH" != "main" ]; then
+            echo "ERROR: Releases must target 'main', got '$TARGET_BRANCH'."
+            exit 1
+          fi
 
-      - name: Simulate a long-running task
+      - name: Verify tag points to origin/main
         run: |
-          echo "Starting a task that will take some time..."
-          sleep 10 # Simulating a 10-second task for testing
-          echo "Task finished."
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          echo "Tag ref: $TAG_REF"
 
-      - name: Create a dummy artifact
-        run: echo "This is a dummy artifact for ${{ github.event.release.tag_name }}" > artifact-${{ github.event.release.tag_name }}.txt
+          git fetch origin main --quiet
 
-      - name: Upload artifact to release (prerelease only)
+          TAG_SHA="$(git rev-parse "$TAG_REF")"
+          MAIN_SHA="$(git rev-parse "origin/main")"
+
+          echo "TAG_SHA:  $TAG_SHA"
+          echo "MAIN_SHA: $MAIN_SHA"
+
+          if [ "$TAG_SHA" != "$MAIN_SHA" ]; then
+            echo "ERROR: Tag $TAG_REF ($TAG_SHA) does not match origin/main ($MAIN_SHA)."
+            exit 1
+          fi
+
+      - name: Log release context
+        run: |
+          echo "Release name:     ${{ github.event.release.name }}"
+          echo "Release tag:      ${{ github.event.release.tag_name }}"
+          echo "Release draft:    ${{ github.event.release.draft }}"
+          echo "Release prerelease: ${{ github.event.release.prerelease }}"
+          echo "Release id:       ${{ github.event.release.id }}"
+          echo "Repo:             ${{ github.repository }}"
+          echo "Commit:           ${{ github.sha }}"
+
+      - name: Run release tasks (TEST PLACEHOLDER)
+        run: |
+          echo ">>> Running release pipeline (TEST ONLY)..."
+          sleep 10
+          echo ">>> Replace this block with real build/test/package/deploy steps."
+
+      - name: Upload dummy artifact (TEST)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-metadata
+          path: .
+          if-no-files-found: warn
+
+      - name: Promote release (flip out of pre-release)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" "artifact-${{ github.event.release.tag_name }}.txt"
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          echo "Promoting release for tag: $TAG_REF"
+
+          gh release edit "$TAG_REF" \
+            --draft=false \
+            --prerelease=false \
+            --repo "${{ github.repository }}"
